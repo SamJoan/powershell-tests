@@ -42,6 +42,9 @@ Function Generate-PinyinToDef {
 
 # https://chinese.stackexchange.com/questions/480/where-can-i-find-audio-recordings-of-every-word
 # https://stackoverflow.com/questions/9163988/download-mp3-from-google-translate-text-to-speech/13823866#13823866
+
+# http://ankisrs.net/docs/manual.html#importing-media
+# C:\Users\User\Documents\Anki\User 1\collection.media
 Function Generate-PinyinToPronunc {
     $SimpChar = $Args[0]
     $Pinyin = $Args[1]
@@ -76,7 +79,7 @@ if(-not $File) {
         $Results = Generate-Results $SimpChar $Pinyin $Definition
         
         foreach($Result in $Results) {
-            Write-Host $Result
+            Write-Output $Result
         }
     }
 }
