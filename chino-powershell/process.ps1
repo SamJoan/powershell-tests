@@ -60,6 +60,7 @@ Function Generate-PinyinToPronunc {
     return "$ToneString - $SimpChar`t$Pinyin"
 }
 
+# @TODO: Make one char pinyin appear before two char. E.g. 中 before 中国。
 $File = $Args[0]
 if(-not $File) {
     Write-Error "$Args[0] must be the location of the file."
