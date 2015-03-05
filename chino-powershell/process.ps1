@@ -1,4 +1,13 @@
-﻿$ErrorActionPreference = "Stop"
+﻿Param(
+    [parameter(Mandatory=$true)]
+    [alias("i")]
+    $InFile,
+    [parameter(Mandatory=$false)]
+    [alias("o")]
+    $OutFile
+)
+
+$ErrorActionPreference = "Stop"
 $OutputEncoding = New-Object -typename System.Text.UTF8Encoding
 
 $ScriptPath = $MyInvocation.MyCommand.Path
@@ -12,45 +21,48 @@ Function Tidy-Definition {
     return $Result
 }
 
-Function Generate-Results {
-    $SimpChar = $Args[0]
-    $Pinyin = $Args[1]
-    $Definition = $Args[2]
-    
+Function New-Card($Property) {
+    return New-Object -Type PSObject -Property $Property
+}
+
+Function Generate-Results($Word) {
     $Results = @()
-    $Results += Generate-SimpToDef $SimpChar $Pinyin $Definition
-    $Results += Generate-PinyinToDef $SimpChar $Pinyin $Definition
-    $Results += Generate-PinyinToPronunc $SimpChar $Pinyin $Definition
+    $Results += New-Card (Generate-SimpToDef $Word)
+    $Results += New-Card (Generate-PinyinToDef $Word)
+    $Results += New-Card (Generate-PinyinToPronunc $Word)
     return $Results
 }
 
-Function Generate-SimpToDef {
-    $SimpChar = $Args[0]
-    $Pinyin = $Args[1]
-    $Definition = $Args[2]
-    
-    return "$SimpChar`t$Pinyin - $Definition"
+Function Generate-Back($Word) {
+    return "{0} - {1} - {2}" -f $Word.Simpchar,$Word.Pinyin,$Word.Definition
 }
 
-Function Generate-PinyinToDef {
-    $SimpChar = $Args[0]
-    $Pinyin = $Args[1]
-    $Definition = $Args[2]
-    
-    return "$Pinyin`t$SimpChar - $Definition"
+Function Generate-SimpToDef($Word) {
+    return @{
+        Front = $Word.SimpChar
+        Back = Generate-Back $Word
+    }
 }
 
-# https://chinese.stackexchange.com/questions/480/where-can-i-find-audio-recordings-of-every-word
-# https://stackoverflow.com/questions/9163988/download-mp3-from-google-translate-text-to-speech/13823866#13823866
-
-# http://ankisrs.net/docs/manual.html#importing-media
-# C:\Users\User\Documents\Anki\User 1\collection.media
-Function Generate-PinyinToPronunc {
-    $SimpChar = $Args[0]
-    $Pinyin = $Args[1]
-    $Definition = $Args[2]
+Function Generate-PinyinToDef($Word) {
+    return @{
+        Front = $Word.Pinyin
+        Back = Generate-Back $Word
+    }
     
-    $Letters = [char[]]([char]'a'..[char]'z')
+}
+
+Function Generate-PinyinToPronunc($Word) {
+    return @{
+        Front = "{0} ({1})" -f $Word.ToneString,$Word.SimpChar
+        Back = Generate-Back $Word
+    }
+}
+
+Function Get-Word($Line) {
+    $Splat = $Line.Split("`t")
+    $Letters = [char[]]([char]'a'..[char]'z') + " "
+    $Pinyin = $Splat[2]
     
     $ToneString = ""
     foreach($Letter in $Pinyin.toCharArray()) {
@@ -61,25 +73,41 @@ Function Generate-PinyinToPronunc {
         }
     }
     
-    return "$ToneString - $SimpChar`t$Pinyin"
-}
-
-# @TODO: Make one char pinyin appear before two char. E.g. 中 before 中国。
-$File = $Args[0]
-if(-not $File) {
-    Write-Error "$Args[0] must be the location of the file."
-} else {
-    $FileContents = get-content -encoding utf8 $File
-    foreach($Line in $FileContents) {
-        $Splat = $Line.Split("`t")
-        $SimpChar = $Splat[0]
-        $Pinyin = $Splat[2]
-        $Definition = Tidy-Definition $Splat[3]
-        
-        $Results = Generate-Results $SimpChar $Pinyin $Definition
-        
-        foreach($Result in $Results) {
-            Write-Output $Result
+    $ToneString = ""
+    foreach($Letter in $Pinyin.toCharArray()) {
+        if($Letters -contains $Letter) {
+            $ToneString += $Letter
+        } else {
+            $ToneString += '_'
         }
     }
+    
+    $Prop = @{
+        SimpChar = $Splat[0]
+        Pinyin = $Pinyin
+        Definition = Tidy-Definition $Splat[3]
+        ToneString = $ToneString
+        length = $Splat[0].length
+    }
+    
+    return New-Object -TypeName PSObject -Property $Prop
+}
+
+$FileContents = Get-Content -Encoding utf8 $InFile
+$Words = @()
+foreach($Line in $FileContents) {
+    $Words += Get-Word $Line
+}
+
+$Results = @()
+$Words = $Words | Sort-Object length
+foreach($Word in $Words) { 
+    $Results += Generate-Results $Word
+}
+
+if($OutFile) {
+    Write-Output $Results | ConvertTo-CSV -Delimiter "`t" -NoTypeInformation | % {$_ -replace '"',''} | Select -Skip 1 | Out-File -Encoding utf8 $OutFile
+    Write-Host ("Wrote to '{0}'" -f $OutFile)
+} else {
+    Write-Output $Results
 }
